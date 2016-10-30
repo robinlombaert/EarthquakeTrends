@@ -10,18 +10,18 @@ Meta-study on precursor earthquakes occurring before strong earthquakes:
 http://www.nature.com/articles/srep04099
 
 The data used in this script are provided in the git repo. The script to 
-download them from the online USGS database is included as well.
+download them from the online USGS database is included as well, but does not 
+have to be called if only the composite eartquake main events dataset is used
+for the plotting scripts.
 
 Usage (with my_path giving the location where data are saved): 
-- When calling from the terminal (0 for plotting data, 1 for downloading/saving), 
+- When calling from the terminal (0 for just plotting data, 1 for also 
+downloading/saving), 
 >>> python trends.py my_path 0
 
 - When calling from the python shell: 
 >>> import trends
->>> trends.fn_base = 'my_path'
->>> data = trends.saveMainEvents()
->>> dprec_total = trends.savePrecursorEvents(data)
->>> plotEQHistory(dprec_total)
+>>> plotEQHistory()
 >>> plotSomething()
 
 Author: R. Lombaert
@@ -34,6 +34,7 @@ import os, sys, time
 import numpy as np
 
 global fn_base
+fn_base = os.path.join(os.path.dirname(__file__),'data')
 
 import matplotlib
 matplotlib.style.use('ggplot')
@@ -143,7 +144,10 @@ def savePrecursorEvents(data):
     #-- To retrieve the precursor earthquakes to each main event, loop over the 
     #   events and select all precursors
     for line in data.itertuples():
-        fn = os.path.join(fn_base,'strongEQ_prec_{}_USGS.csv'.format(line[0]))
+        if not os.path.isdir(os.path.join(fn_base,'subsets')):
+            os.system('mkdir {}'.format(os.path.join(fn_base,'subsets')))
+        fn = os.path.join(fn_base,'subsets',\
+                          'strongEQ_prec_{}_USGS.csv'.format(line[0]))
     
         #-- Some redundancy in case the code stopped.
         if os.path.isfile(fn): continue
@@ -171,10 +175,11 @@ def savePrecursorEvents(data):
                   'maxradiuskm': 100}
         dprec = retrieveData(parse_dates=[0,12],**kwargs)
     
-        #-- Add an additional column linking the precursors with the main event by 
-        #   its index in the main data. Note that the main event is typically the 
-        #   first event in the list of precursors for the event index.
-        dprec['main_event'] = pd.Series([line[0]]*len(dprec.time),index=dprec.index)
+        #-- Add an additional column linking the precursors with the main event
+        #   by its index in the main data. Note that the main event is typically
+        #   the first event in the list of precursors for the event index.
+        dprec['main_event'] = pd.Series([line[0]]*len(dprec.time),\
+                                        index=dprec.index)
     
         #-- Save the precursor dataset to merge it later 
         fn = os.path.join(fn_base,'strongEQ_prec_{}_USGS.csv'.format(line[0]))
@@ -187,7 +192,8 @@ def savePrecursorEvents(data):
     #-- Once downloaded, read all the files again and save to one main database.
     all = []
     for line in data.itertuples():
-        fn = os.path.join(fn_base,'strongEQ_prec_{}_USGS.csv'.format(line[0]))
+        fn = os.path.join(fn_base,'subsets',\
+                          'strongEQ_prec_{}_USGS.csv'.format(line[0]))
         dprec = pd.read_csv(fn,parse_dates=[0,12])
     
         #-- Make sure the indices play nice in case we use the dprec_total DF as
@@ -220,7 +226,7 @@ def plotEQHistory():
     ax.plot_date(x=df.time, y=df.mag, marker='.', ms=2)
     plt.xlabel('Date of event')
     plt.ylabel('Earthquake Magnitude')
-    plt.show()
+    #plt.show()
     pfn = os.path.join(fn_base,'plotEQMagHistory.png')
     fig.savefig(pfn)
     
@@ -240,25 +246,25 @@ def plotEQFrequency():
     df = pd.read_csv(fn,usecols=['time','mag','main_event'],parse_dates=[0])
     df.index = df.time
     df = df['1970':]
-    df = df[df.mag < (df.groupby('main_event').mag.max().get(df['main_event']) - 3)]
+    df = df[df.mag < (df.groupby('main_event').mag.max().get(df.main_event)-3)]
     df = df[df.groupby('main_event').main_event.count().get(df.main_event).values>2000]
     dfg = df.groupby('main_event')
-    print np.unique(df.main_event.values)
-    df['days_before'] = (df.time-(dfg.time.max().get(df.main_event)-pd.DateOffset(years=1)).values)/np.timedelta64(1,'D')
+    df['days_before'] = (df.time-(dfg.time.max().get(df.main_event)\
+                         -pd.DateOffset(years=1)).values)/np.timedelta64(1,'D')
     df['freq_prec'] = (dfg.main_event.cumcount(ascending=False)+1)/df.days_before
     
     plt.clf()
     fig = plt.figure(1)
     
     for i,idf in df.groupby('main_event'):
-        plt.plot(idf['days_before'].values,idf['freq_prec'].values)
+        plt.plot(idf.days_before.values,idf.freq_prec.values)
         
     plt.xlabel('Time (days)')
     plt.ylabel('Micro-event frequency (1/days)')
     plt.ylim(ymax=25)
     plt.xlim(xmin=0)
     plt.xlim(xmax=366)
-    plt.show()
+    #plt.show()
     pfn = os.path.join(fn_base,'plotEQFrequency.png')
     fig.savefig(pfn)
     
@@ -269,7 +275,7 @@ if __name__ == "__main__":
     try:
         fn_base = sys.argv[1]
     except IndexError:
-        fn_base = os.getcwd()
+        pass
         
     try: 
         save_data = sys.argv[2]
@@ -279,7 +285,7 @@ if __name__ == "__main__":
     if int(save_data):    
         data = saveMainEvents()
         dprec_total = savePrecursorEvents(data)
-    
+
     plotEQHistory()
     plotSomething()
 
