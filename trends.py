@@ -9,15 +9,18 @@ Program: http://earthquake.usgs.gov/earthquakes/search/
 Meta-study on precursor earthquakes occurring before strong earthquakes:
 http://www.nature.com/articles/srep04099
 
+The script is available on GitHub at:
+https://github.com/robinlombaert/EarthquakeTrends
+
 The data used in this script are provided in the git repo. The script to 
 download them from the online USGS database is included as well, but does not 
 have to be called if only the composite eartquake main events dataset is used
 for the plotting scripts.
 
-Usage (with my_path giving the location where data are saved): 
+Usage (with the optional my_path giving the location where data are saved): 
 - When calling from the terminal (0 for just plotting data, 1 for also 
-downloading/saving), 
->>> python trends.py my_path 0
+downloading/saving in which case my_path must be defined), 
+/-> python trends.py my_path 0
 
 - When calling from the python shell: 
 >>> import trends
@@ -226,7 +229,6 @@ def plotEQHistory():
     ax.plot_date(x=df.time, y=df.mag, marker='.', ms=2)
     plt.xlabel('Date of event')
     plt.ylabel('Earthquake Magnitude')
-    #plt.show()
     pfn = os.path.join(fn_base,'plotEQMagHistory.png')
     fig.savefig(pfn)
     
@@ -235,7 +237,13 @@ def plotEQHistory():
 def plotEQFrequency():
 
     '''
-    Plot the micro earthquake event frequency  as a function of time.
+    Plot the micro precursor earthquake event frequency as a function of time 
+    for a subset of main events.
+    
+    This plot is for illustrative purposes: there is clear structure in the
+    frequency of so-called micro-earthquakes (i.e. with magnitude less than 
+    the magnitude of the main event minus 3, according to 
+    http://www.nature.com/articles/srep04099)
     
     A micro event is defined as an earthquake having magnitude less than the 
     main event minus 3. 
@@ -245,26 +253,40 @@ def plotEQFrequency():
     fn = os.path.join(fn_base,'strongEQ_precursors_USGS.csv')
     df = pd.read_csv(fn,usecols=['time','mag','main_event'],parse_dates=[0])
     df.index = df.time
+    
+    #-- Select all events since 1970. Before 1970, the data are significantly 
+    #   less complete. 
     df = df['1970':]
+    
+    #-- Select only those precursor events that have a magnitude at least 3 less
+    #   than the main event
     df = df[df.mag < (df.groupby('main_event').mag.max().get(df.main_event)-3)]
-    df = df[df.groupby('main_event').main_event.count().get(df.main_event).values>2000]
+    
+    #-- Select a subset for illustrative purposes by number of events available
+    df = df[df.groupby('main_event').main_event.count()\
+              .get(df.main_event).values>2000]
+    
+    #-- Group by main event, and define the time axis by number of days since 
+    #   1 year before the main event
     dfg = df.groupby('main_event')
-    df['days_before'] = (df.time-(dfg.time.max().get(df.main_event)\
+    df['days_prec'] = (df.time-(dfg.time.max().get(df.main_event)\
                          -pd.DateOffset(years=1)).values)/np.timedelta64(1,'D')
-    df['freq_prec'] = (dfg.main_event.cumcount(ascending=False)+1)/df.days_before
+                         
+    #-- The precursor event frequency is defined as the cumulative count of 
+    #   events divided by the number of days since 1 year before the main event
+    df['freq_prec'] = (dfg.main_event.cumcount(ascending=False)+1)/df.days_prec
     
     plt.clf()
     fig = plt.figure(1)
     
     for i,idf in df.groupby('main_event'):
-        plt.plot(idf.days_before.values,idf.freq_prec.values)
+        plt.plot(idf.days_prec.values,idf.freq_prec.values)
         
     plt.xlabel('Time (days)')
     plt.ylabel('Micro-event frequency (1/days)')
     plt.ylim(ymax=25)
     plt.xlim(xmin=0)
     plt.xlim(xmax=366)
-    #plt.show()
     pfn = os.path.join(fn_base,'plotEQFrequency.png')
     fig.savefig(pfn)
     
@@ -287,5 +309,5 @@ if __name__ == "__main__":
         dprec_total = savePrecursorEvents(data)
 
     plotEQHistory()
-    plotSomething()
+    plotEQFrequency()
 
