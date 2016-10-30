@@ -11,3 +11,5 @@ You can download the script and data to your hard disk:
     
 Remember to add ~/EarthquakeTrends to your system PYTHONPATH variable if you wish to import the trends module into python.
 
+The required python modules are listed in requirements.txt.
+
